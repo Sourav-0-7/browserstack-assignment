@@ -1,33 +1,28 @@
 import os
-import requests
 from selenium import webdriver
-from selenium.webdriver.common.by import By
+from concurrent.futures import ThreadPoolExecutor
 
-def get_articles():
-    os.makedirs('images', exist_ok=True)
-    driver = webdriver.Chrome()
+BS_USER = os.getenv("BROWSERSTACK_USERNAME")
+BS_KEY = os.getenv("BROWSERSTACK_ACCESS_KEY")
+URL = "http://hub.browserstack.com/wd/hub"
+
+caps_list = [
+    {"os": "Windows", "os_version": "10", "browser": "Chrome", "browser_version": "latest"},
+    {"os": "OS X", "os_version": "Monterey", "browser": "Safari", "browser_version": "latest"},
+    {"device": "Samsung Galaxy S22", "realMobile": "true", "os_version": "12.0"},
+    {"device": "iPhone 13", "realMobile": "true", "os_version": "15"},
+    {"os": "Windows", "os_version": "10", "browser": "Firefox", "browser_version": "latest"}
+]
+
+def run_test(cap):
+    cap['browserstack.user'] = BS_USER
+    cap['browserstack.key'] = BS_KEY
+    cap['name'] = "Opinion Section Test"
+    driver = webdriver.Remote(command_executor=URL, desired_capabilities=cap)
     driver.get("https://elpais.com/opinion/")
-    articles = driver.find_elements(By.CSS_SELECTOR, "article")[:5]
-    result = []
-
-    for idx, art in enumerate(articles, 1):
-        link = art.find_element(By.TAG_NAME, "a").get_attribute("href")
-        driver.get(link)
-        title = driver.find_element(By.TAG_NAME, "h1").text
-        paragraphs = driver.find_elements(By.CSS_SELECTOR, "div.a_c a_p") or \
-                     driver.find_elements(By.CSS_SELECTOR, "div[data-testid='article-body'] p")
-        content = "\n".join([p.text for p in paragraphs])
-        img_url = None
-        try:
-            img_url = driver.find_element(By.TAG_NAME, "figure img").get_attribute("src")
-            img_data = requests.get(img_url).content
-            fname = f"images/article_{idx}.jpg"
-            with open(fname, "wb") as f: f.write(img_data)
-        except Exception:
-            pass
-
-        result.append({"title": title, "content": content, "img": img_url})
-        driver.back()
-
+    print(f"{cap.get('browser','device')}: Title is '{driver.title}'")
     driver.quit()
-    return result
+
+if __name__ == "__main__":
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        ex.map(run_test, caps_list)
