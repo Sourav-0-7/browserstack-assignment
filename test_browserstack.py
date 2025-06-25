@@ -6,6 +6,13 @@ from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.safari.options import Options as SafariOptions
 from dotenv import load_dotenv
+from scraper.opinion_scraper import get_articles
+from translator.translator import translate
+from analyzer.text_analyzer import analyze
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 load_dotenv()
 
@@ -64,7 +71,7 @@ capabilities_list = [
 def run_browserstack_test(cap):
     name = cap.get("browserName") or cap["bstack:options"].get("deviceName", "Unnamed")
     try:
-        print(f"➡️  Starting test: {name}")
+        logging.info(f"Starting test: {name}")
         
         # Select the appropriate Options class based on browserName
         browser_name = cap.get("browserName", "").lower()
@@ -87,11 +94,28 @@ def run_browserstack_test(cap):
 
         # Initialize WebDriver with options
         driver = webdriver.Remote(command_executor=REMOTE_URL, options=options)
-        driver.get("https://elpais.com/opinion/")
-        print(f"✅ [{name}] Title: {driver.title}")
+        
+        # Run the full pipeline
+        articles = get_articles(driver=driver)
+        print(f"\n--- [{name}] Scraped Articles (Spanish) ---")
+        for art in articles:
+            print(f"\nTitle: {art['title']}\nContent (first 200 chars):\n{art['content'][:200]}...\nImage URL: {art['img']}")
+
+        translated = [translate(a["title"]) for a in articles]
+        print(f"\n--- [{name}] Translated Titles (English) ---")
+        for t in translated:
+            print(t)
+
+        freqs = analyze(translated)
+        print(f"\n--- [{name}] Repeated Words (count > 2) ---")
+        for w, c in freqs.items():
+            print(f"{w}: {c}")
+
         driver.quit()
+        logging.info(f"Test completed successfully: {name}")
     except Exception as e:
-        print(f"❌ [{name}] Error running test: {e}")
+        logging.error(f"Error running test [{name}]: {e}", exc_info=True)
+        raise  # Re-raise to ensure ThreadPoolExecutor captures the error
 
 if __name__ == "__main__":
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
