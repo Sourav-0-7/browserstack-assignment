@@ -1,44 +1,61 @@
 import os
 import requests
-from selenium.webdriver.common.by import By
+from bs4 import BeautifulSoup
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.options import Options
+import time
+
 def get_articles():
-    os.makedirs('images', exist_ok=True)
-    driver = webdriver.Chrome()
-    driver.get("https://elpais.com/opinion/")
+    options = Options()
+    # options.add_argument("--headless")
+    driver = webdriver.Chrome(options=options)
 
-    # Step 1: Extract the first 5 article URLs
-    article_elements = driver.find_elements(By.CSS_SELECTOR, "article a")[:5]
-    article_urls = [a.get_attribute("href") for a in article_elements]
+    url = "https://elpais.com/opinion/"
+    driver.get(url)
+    time.sleep(2)
 
-    results = []
+    soup = BeautifulSoup(driver.page_source, "html.parser")
+    articles_data = []
 
-    for idx, url in enumerate(article_urls, 1):
-        driver.get(url)
-        try:
-            title = driver.find_element(By.TAG_NAME, "h1").text
-            paragraphs = driver.find_elements(By.CSS_SELECTOR, "div.a_c a_p") or \
-                         driver.find_elements(By.CSS_SELECTOR, "div[data-testid='article-body'] p")
-            content = "\n".join([p.text for p in paragraphs])
+    for idx, article in enumerate(soup.select("article")[:5]):
+        title_tag = article.find("h2")
+        link_tag = article.find("a", href=True)
+        if not (title_tag and link_tag): continue
 
-            img_url = None
-            try:
-                img_url = driver.find_element(By.TAG_NAME, "figure img").get_attribute("src")
-                img_data = requests.get(img_url).content
-                with open(f'images/article_{idx}.jpg', 'wb') as f:
-                    f.write(img_data)
-            except Exception:
-                pass
+        article_url = link_tag["href"]
+        if article_url.startswith("/"):
+            article_url = "https://elpais.com" + article_url
+        driver.get(article_url)
+        time.sleep(2)
 
-            results.append({
-                "title": title,
-                "content": content,
-                "img": img_url
-            })
-        except Exception as e:
-            print(f"Failed to parse article: {url}, error: {e}")
+        page = BeautifulSoup(driver.page_source, "html.parser")
+        content_tag = page.select_one("article")
+        content = content_tag.get_text(separator=" ") if content_tag else "No content"
+
+        img_tag = page.select_one("article img")
+        img_url = img_tag["src"] if img_tag and img_tag.has_attr("src") else None
+
+        img_path = save_image(img_url, idx) if img_url else None
+
+        articles_data.append({
+            "title": title_tag.get_text().strip(),
+            "content": content.strip(),
+            "img": img_path
+        })
 
     driver.quit()
-    return results
+    return articles_data
+
+def save_image(url, idx):
+    try:
+        os.makedirs("images", exist_ok=True)
+        ext = url.split(".")[-1].split("?")[0]
+        filename = f"images/article_{idx}.{ext}"
+        resp = requests.get(url, timeout=5)
+        if resp.ok:
+            with open(filename, "wb") as f:
+                f.write(resp.content)
+            return filename
+    except Exception as e:
+        print(f"[Image Error] {e}")
+    return None

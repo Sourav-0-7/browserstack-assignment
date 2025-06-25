@@ -22,3 +22,10 @@ def run_all():
 
 if __name__ == "__main__":
     run_all()
+
+# ✅ To Run Everything:
+# Local testing:
+# python main.py
+
+# Cross-browser tests (on BrowserStack):
+# python test_browserstack.py

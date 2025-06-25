@@ -2,3 +2,5 @@ selenium==4.11.2
 requests
 python-dotenv
 webdriver-manager
+beautifulsoup4
+
